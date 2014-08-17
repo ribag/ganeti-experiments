@@ -404,46 +404,68 @@ class TestUnescapeAndSplit(unittest.TestCase):
     # testing more that one separator for regexp safety
     self._seps = [",", "+", ".", ":"]
 
+  def _checkSplitRejoinEquivalence(self, a, b, sep, suffix=""):
+    self.assertEqual(utils.UnescapeAndSplit(sep.join(a) + suffix, sep=sep), b)
+
   def testSimple(self):
     a = ["a", "b", "c", "d"]
     for sep in self._seps:
-      self.failUnlessEqual(utils.UnescapeAndSplit(sep.join(a), sep=sep), a)
+      self._checkSplitRejoinEquivalence(a, a, sep)
 
   def testEscape(self):
     for sep in self._seps:
       a = ["a", "b\\" + sep + "c", "d"]
       b = ["a", "b" + sep + "c", "d"]
-      self.failUnlessEqual(utils.UnescapeAndSplit(sep.join(a), sep=sep), b)
+      self._checkSplitRejoinEquivalence(a, b, sep)
 
   def testDoubleEscape(self):
     for sep in self._seps:
       a = ["a", "b\\\\", "c", "d"]
       b = ["a", "b\\", "c", "d"]
-      self.failUnlessEqual(utils.UnescapeAndSplit(sep.join(a), sep=sep), b)
+      self._checkSplitRejoinEquivalence(a, b, sep)
 
   def testThreeEscape(self):
     for sep in self._seps:
       a = ["a", "b\\\\\\" + sep + "c", "d"]
       b = ["a", "b\\" + sep + "c", "d"]
-      self.failUnlessEqual(utils.UnescapeAndSplit(sep.join(a), sep=sep), b)
+      self._checkSplitRejoinEquivalence(a, b, sep)
 
   def testEscapeAtEnd(self):
     for sep in self._seps:
+      # Left as-is to maintain readability
       self.assertEqual(utils.UnescapeAndSplit("\\", sep=sep), ["\\"])
 
       a = ["a", "b\\", "c"]
       b = ["a", "b" + sep + "c\\"]
-      self.assertEqual(utils.UnescapeAndSplit("%s\\" % sep.join(a), sep=sep), b)
+      self._checkSplitRejoinEquivalence(a, b, sep, suffix='\\')
 
       a = ["\\" + sep, "\\" + sep, "c", "d\\.moo"]
       b = [sep, sep, "c", "d.moo\\"]
-      self.assertEqual(utils.UnescapeAndSplit("%s\\" % sep.join(a), sep=sep), b)
+      self._checkSplitRejoinEquivalence(a, b, sep, suffix='\\')
 
   def testMultipleEscapes(self):
     for sep in self._seps:
       a = ["a", "b\\" + sep + "c", "d\\" + sep + "e\\" + sep + "f", "g"]
       b = ["a", "b" + sep + "c", "d" + sep + "e" + sep + "f", "g"]
-      self.failUnlessEqual(utils.UnescapeAndSplit(sep.join(a), sep=sep), b)
+      self._checkSplitRejoinEquivalence(a, b, sep)
+
+  def testEscapeNotAtEnd(self):
+    for sep in self._seps:
+      a = ["a", "b\\\\c", "d\\e"]
+      b = ["a", "b\\c", "de"]
+      self._checkSplitRejoinEquivalence(a, b, sep)
+
+  def testAnticipatingQuotes(self):
+    for sep in self._seps:
+      for quote in ["'", '"']:
+        a = ["a%s" % quote, "b\\"]
+        b = ["a%s" % quote, "b\\"]
+        self._checkSplitRejoinEquivalence(a, b, sep)
+
+        a = ["a", "b%s\\,%sc" % (quote, quote), "d"]
+        b = ["a", "b%s,%sc" % (quote, quote), "d"]
+        self._checkSplitRejoinEquivalence(a, b, sep)
+
 
 class TestEscapeAndJoin(unittest.TestCase):
   def verifyParsesCorrect(self, args):
