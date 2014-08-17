@@ -440,27 +440,41 @@ def UnescapeAndSplit(text, sep=","):
   @return: a list of strings
 
   """
-  # we split the list by sep (with no escaping at this stage)
-  slist = text.split(sep)
-  # next, we revisit the elements and if any of them ended with an odd
-  # number of backslashes, then we join it with the next
-  rlist = []
-  while slist:
-    e1 = slist.pop(0)
-    if e1.endswith("\\"):
-      num_b = len(e1) - len(e1.rstrip("\\"))
-      if num_b % 2 == 1 and slist:
-        e2 = slist.pop(0)
-        # Merge the two elements and push the result back to the source list for
-        # revisiting. If e2 ended with backslashes, further merging may need to
-        # be done.
-        slist.insert(0, e1 + sep + e2)
-        continue
-    # here the backslashes remain (all), and will be reduced in the next step
-    rlist.append(e1)
-  # finally, replace backslash-something with something
-  rlist = [re.sub(r"\\(.)", r"\1", v) for v in rlist]
-  return rlist
+  segments = []
+  accumulator = []
+
+  search_re = re.compile("\\\\.|%s" % re.escape(sep))
+
+  start_index = 0
+  while True:
+    # Look for next interesting string, in a rather inefficient way which
+    # could be made better if we could tell the regex where to start
+    first_match = search_re.search(text[start_index:])
+    found, match_start = "", len(text)
+    if first_match is not None:
+      found, match_start = (first_match.group(0),
+                            first_match.start(0) + start_index)
+
+    # Grab what is between the previous and current string of interest
+    accumulator.append(text[start_index:match_start])
+
+    # Determine what to do with what was found
+    if found == sep or found == "":
+      segments.append("".join(accumulator))
+      accumulator = []
+    elif found[0] == '\\':
+      accumulator.append(found[-1]) # Works for single slash as well
+    else:
+      raise errors.ProgrammerError(
+        "All cases should have been handled, found %s" % found
+      )
+
+    start_index = match_start + len(found)
+
+    if found == "":
+      break
+
+  return segments
 
 
 def EscapeAndJoin(slist, sep=","):
