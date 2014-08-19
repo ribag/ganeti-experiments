@@ -21,6 +21,7 @@
 
 """Script for testing ganeti.utils.text"""
 
+import itertools
 import re
 import string
 import time
@@ -403,9 +404,14 @@ class TestUnescapeAndSplit(unittest.TestCase):
   def setUp(self):
     # testing more that one separator for regexp safety
     self._seps = [",", "+", ".", ":"]
+    self._quotes = ["'", '"', '*']
+    self._quote_permutations = list(itertools.permutations(self._quotes))
 
-  def _checkSplitRejoinEquivalence(self, a, b, sep, suffix=""):
-    self.assertEqual(utils.UnescapeAndSplit(sep.join(a) + suffix, sep=sep), b)
+  def _checkSplitRejoinEquivalence(self, a, b, sep, quote_chars=None,
+                                   suffix=""):
+    self.assertEqual(utils.UnescapeAndSplit(sep.join(a) + suffix, sep=sep,
+                                            quote_chars=quote_chars),
+                     b)
 
   def testSimple(self):
     a = ["a", "b", "c", "d"]
@@ -455,16 +461,45 @@ class TestUnescapeAndSplit(unittest.TestCase):
       b = ["a", "b\\c", "de"]
       self._checkSplitRejoinEquivalence(a, b, sep)
 
-  def testAnticipatingQuotes(self):
+  def testLegacyQuoteBehavior(self):
     for sep in self._seps:
-      for quote in ["'", '"']:
+      for quote in self._quotes:
         a = ["a%s" % quote, "b\\"]
         b = ["a%s" % quote, "b\\"]
-        self._checkSplitRejoinEquivalence(a, b, sep)
+        self._checkSplitRejoinEquivalence(a, b, sep, quote_chars=[quote])
 
-        a = ["a", "b%s\\,%sc" % (quote, quote), "d"]
-        b = ["a", "b%s,%sc" % (quote, quote), "d"]
-        self._checkSplitRejoinEquivalence(a, b, sep)
+  def testBasicQuoting(self):
+    for sep in self._seps:
+      for quote in self._quotes:
+        a = ["a", "{0}{1}{0}".format(quote, sep), "b"]
+        b = ["a", sep, "b"]
+        self._checkSplitRejoinEquivalence(a, b, sep, quote_chars=[quote])
+        self._checkSplitRejoinEquivalence(a, b, sep, quote_chars=self._quotes)
+
+        a = ["a", "b{0}\\{1}{1}cde{0}{1}f".format(quote, sep), "g\\%s" % sep]
+        b = ["a", "b{0}{0}cde".format(sep), "f", "g%s" % sep]
+        self._checkSplitRejoinEquivalence(a, b, sep, quote_chars=self._quotes)
+
+  def testEscapedQuotes(self):
+    for sep in self._seps:
+      for quote in self._quotes:
+        a = ["{0}ab\\{0}cd{0}".format(quote)]
+        b = ["ab{0}cd".format(quote)]
+        self._checkSplitRejoinEquivalence(a, b, sep, quote_chars=[quote])
+
+        a = [('\\' + quote) * 2]
+        b = [quote * 2]
+        self._checkSplitRejoinEquivalence(a, b, sep, quote_chars=[quote])
+
+  def testMultiQuote(self):
+    for sep in self._seps:
+      for quotes in self._quote_permutations:
+        quote_outer = quotes[0]
+        quote_inner = quotes[1]
+
+        a = [quote_outer + quote_inner + quote_outer, quote_inner]
+        b = [quote_inner, quote_inner]
+        self._checkSplitRejoinEquivalence(a, b, sep, quote_chars=quotes)
 
 
 class TestEscapeAndJoin(unittest.TestCase):

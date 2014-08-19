@@ -419,31 +419,38 @@ def SafeEncode(text):
   return resu
 
 
-def UnescapeAndSplit(text, sep=","):
+def UnescapeAndSplit(text, sep=",", quote_chars=None):
   r"""Split and unescape a string based on a given separator.
 
   This function splits a string based on a separator where the
   separator itself can be escape in order to be an element of the
-  elements. The escaping rules are (assuming coma being the
-  separator):
-    - a plain , separates the elements
-    - a sequence \\\\, (double backslash plus comma) is handled as a
-      backslash plus a separator comma
-    - a sequence \, (backslash plus comma) is handled as a
-      non-separator comma
+  elements. The escaping rules are (assuming comma being the
+  separator, and a single quote the quote character):
+    - a plain , separates the elements, unless enclosed within quotes
+    - prefixing any character with a backslash removes any special meaning the
+      character might have - slashes, commas and quote characters are affected
 
   @type text: string
   @param text: the string to split
   @type sep: string
   @param text: the separator
+  @type quote_chars: list of string
+  @param quote_chars: the possible quote characters
   @rtype: string
   @return: a list of strings
 
   """
+  if quote_chars is None:
+    quote_chars = []
+
   segments = []
   accumulator = []
 
-  search_re = re.compile("\\\\.|%s" % re.escape(sep))
+  re_components = ["\\\\.", re.escape(sep)]
+  for quote_char in quote_chars:
+    escaped = re.escape(quote_char)
+    re_components.append(r"{0}(\\{0}|[^{0}])*{0}".format(escaped))
+  search_re = re.compile('|'.join(re_components))
 
   start_index = 0
   while True:
@@ -464,6 +471,11 @@ def UnescapeAndSplit(text, sep=","):
       accumulator = []
     elif found[0] == '\\':
       accumulator.append(found[-1]) # Works for single slash as well
+    elif found[0] in quote_chars:
+      unquoted = found[1:-1]
+      # Anything that was escaped inside should be unescaped
+      unquoted = re.sub(r"\\(.)", r"\1", unquoted)
+      accumulator.append(unquoted)
     else:
       raise errors.ProgrammerError(
         "All cases should have been handled, found %s" % found
