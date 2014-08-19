@@ -599,7 +599,7 @@ def check_unit(option, opt, value): # pylint: disable=W0613
     raise OptionValueError("option %s: %s" % (opt, err))
 
 
-def _SplitKeyVal(opt, data, parse_prefixes):
+def _SplitKeyVal(opt, data, parse_prefixes, quote_chars=None):
   """Convert a KeyVal string into a dict.
 
   This function will convert a key=val[,...] string into a dict. Empty
@@ -615,6 +615,8 @@ def _SplitKeyVal(opt, data, parse_prefixes):
   @param data: a string of the format key=val,key=val,...
   @type parse_prefixes: bool
   @param parse_prefixes: whether to handle prefixes specially
+  @type quote_chars: list of string
+  @param quote_chars: quotes which can be used to escape separators
   @rtype: dict
   @return: {key=val, key=val}
   @raises errors.ParameterError: if there are duplicate keys
@@ -622,7 +624,7 @@ def _SplitKeyVal(opt, data, parse_prefixes):
   """
   kv_dict = {}
   if data:
-    for elem in utils.UnescapeAndSplit(data, sep=","):
+    for elem in utils.UnescapeAndSplit(data, sep=",", quote_chars=quote_chars):
       if "=" in elem:
         key, val = elem.split("=", 1)
       elif parse_prefixes:
@@ -696,6 +698,15 @@ def check_key_val(option, opt, value):  # pylint: disable=W0613
 
   """
   return _SplitKeyVal(opt, value, True)
+
+
+def check_quotable_key_val(option, opt, value):  # pylint: disable=W0613
+  """Custom parser class for key=val,key=val options which can be quoted.
+
+  This will store the parsed values as a dict {key: val}.
+
+  """
+  return _SplitKeyVal(opt, value, True, quote_chars=["'", '"'])
 
 
 def check_key_private_val(option, opt, value):  # pylint: disable=W0613
@@ -810,6 +821,7 @@ class CliOption(Option):
     "identkeyval",
     "keyval",
     "keyprivateval",
+    "quotablekeyval",
     "unit",
     "bool",
     "list",
@@ -820,6 +832,7 @@ class CliOption(Option):
   TYPE_CHECKER["identkeyval"] = check_ident_key_val
   TYPE_CHECKER["keyval"] = check_key_val
   TYPE_CHECKER["keyprivateval"] = check_key_private_val
+  TYPE_CHECKER["quotablekeyval"] = check_quotable_key_val
   TYPE_CHECKER["unit"] = check_unit
   TYPE_CHECKER["bool"] = check_bool
   TYPE_CHECKER["list"] = check_list
@@ -1009,7 +1022,7 @@ BACKEND_OPT = cli_option("-B", "--backend-parameters", dest="beparams",
                          type="keyval", default={},
                          help="Backend parameters")
 
-HVOPTS_OPT = cli_option("-H", "--hypervisor-parameters", type="keyval",
+HVOPTS_OPT = cli_option("-H", "--hypervisor-parameters", type="quotablekeyval",
                         default={}, dest="hvparams",
                         help="Hypervisor parameters")
 
